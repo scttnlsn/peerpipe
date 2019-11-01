@@ -1,3 +1,4 @@
+mod crypto;
 mod discovery;
 mod receiver;
 mod sender;

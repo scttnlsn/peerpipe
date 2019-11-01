@@ -1,6 +1,6 @@
 # peerpipe
 
-An auto-discoverable network pipe for P2P data transfer
+An auto-discoverable, encrypted network pipe for P2P data transfer
 
 ## Example
 

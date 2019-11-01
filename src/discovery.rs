@@ -32,9 +32,8 @@ impl Multicast {
         let socket = net::UdpSocket::bind((any, self.port))?;
         socket.join_multicast_v4(&self.addr, &any)?;
 
-        let (size, src) = socket.recv_from(&mut buf)?;
-
-        Ok((size, src))
+        let res = socket.recv_from(&mut buf)?;
+        Ok(res)
     }
 }
 

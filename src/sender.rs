@@ -1,10 +1,12 @@
+use crate::crypto;
+use cryptostream::write::Encryptor;
 use failure::Error;
+use openssl::symm::Cipher;
 use std::io::{Read, Write};
 use std::net;
 
 const BUFSIZE: usize = 4096;
 
-#[derive(Debug)]
 pub struct Sender<T: Read> {
     listener: net::TcpListener,
     addr: net::SocketAddr,
@@ -40,6 +42,18 @@ impl<T> Sender<T> where T: Read {
     }
 
     fn handle_stream(&mut self, mut stream: net::TcpStream) -> Result<(), Error> {
+        let shared_secret = crypto::key_exchange(&mut stream)?;
+        let shared_iv = crypto::key_exchange(&mut stream)?;
+
+        let cipher = Cipher::aes_128_cbc();
+
+        let mut key: Vec<u8> = shared_secret.as_bytes().to_vec();
+        key.truncate(cipher.block_size());
+
+        let mut iv: Vec<u8> = shared_iv.as_bytes().to_vec();
+        iv.truncate(cipher.block_size());
+
+        let mut encryptor = Encryptor::new(stream, cipher, &key, &iv)?;
         let mut buf = [0u8; BUFSIZE];
 
         loop {
@@ -49,10 +63,10 @@ impl<T> Sender<T> where T: Read {
                 break;
             }
 
-            stream.write(&buf[0..size])?;
+            encryptor.write(&buf[0..size])?;
         }
 
-        stream.flush()?;
+        encryptor.flush()?;
 
         Ok(())
     }
