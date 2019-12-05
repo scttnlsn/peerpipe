@@ -1,7 +1,8 @@
 use crate::crypto;
-use cryptostream::write::Encryptor;
+use cryptostream;
 use failure::Error;
 use openssl::symm::Cipher;
+use sha2::{Sha256, Digest};
 use std::io::{Read, Write};
 use std::net;
 
@@ -11,6 +12,7 @@ pub struct Sender<T: Read> {
     listener: net::TcpListener,
     addr: net::SocketAddr,
     source: T,
+    secret: Option<String>,
 }
 
 impl<T> Sender<T> where T: Read {
@@ -22,6 +24,7 @@ impl<T> Sender<T> where T: Read {
             listener: listener,
             addr: addr,
             source: source,
+            secret: None,
         })
     }
 
@@ -29,19 +32,29 @@ impl<T> Sender<T> where T: Read {
         self.addr.port()
     }
 
+    pub fn set_secret(&mut self, secret: Option<String>) {
+        self.secret = secret;
+    }
+
     pub fn serve(&mut self) -> Result<(), Error> {
-        match self.listener.incoming().next() {
-            Some(stream) => {
-                self.handle_stream(stream?)?;
-            },
-            None => {
-            },
+        loop {
+            match self.listener.incoming().next() {
+                Some(stream) => {
+                    let accepted = self.handle_stream(stream?)?;
+                    if accepted {
+                        break;
+                    }
+                },
+                None => {
+                    break;
+                },
+            }
         }
 
         Ok(())
     }
 
-    fn handle_stream(&mut self, mut stream: net::TcpStream) -> Result<(), Error> {
+    fn handle_stream(&mut self, mut stream: net::TcpStream) -> Result<bool, Error> {
         let shared_secret = crypto::key_exchange(&mut stream)?;
         let shared_iv = crypto::key_exchange(&mut stream)?;
 
@@ -53,8 +66,21 @@ impl<T> Sender<T> where T: Read {
         let mut iv: Vec<u8> = shared_iv.as_bytes().to_vec();
         iv.truncate(cipher.block_size());
 
-        let mut encryptor = Encryptor::new(stream, cipher, &key, &iv)?;
+        if let Some(secret) = &self.secret {
+            let mut hasher = Sha256::new();
+            hasher.input(secret.as_bytes());
+
+            // read hashed secret from receiver
+            let mut buf = [0u8; 32];
+            let size = stream.read(&mut buf[..])?;
+            if size != 32 || hasher.result()[..] != buf[..] {
+                // receiver sent wrong secret
+                return Ok(false);
+            }
+        }
+
         let mut buf = [0u8; BUFSIZE];
+        let mut encryptor = cryptostream::write::Encryptor::new(&stream, cipher, &key, &iv)?;
 
         loop {
             let size = self.source.read(&mut buf)?;
@@ -68,6 +94,6 @@ impl<T> Sender<T> where T: Read {
 
         encryptor.flush()?;
 
-        Ok(())
+        Ok(true)
     }
 }

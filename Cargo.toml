@@ -9,8 +9,9 @@ edition = "2018"
 [dependencies]
 byteorder = "1.3.2"
 clap = "2.33.0"
-cryptostream = "0.1.0"
+cryptostream = { git = "https://github.com/scttnlsn/cryptostream", branch = "empty-read" }
 failure = "0.1.6"
 openssl = "0.10.25"
 rand_os = "0.1"
+sha2 = "0.8.0"
 x25519-dalek = "0.5.2"
